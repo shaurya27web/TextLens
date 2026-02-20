@@ -1,13 +1,27 @@
 const fetch = require('node-fetch');
 const fs = require('fs');
+const sharp = require('sharp');
+
+const compressImage = async (imagePath) => {
+  const compressedPath = imagePath.replace(/\.[^/.]+$/, '_compressed.jpg');
+  await sharp(imagePath)
+    .resize({ width: 1500, withoutEnlargement: true })
+    .jpeg({ quality: 60 })
+    .toFile(compressedPath);
+  return compressedPath;
+};
 
 const extractTextFromImage = async (imagePath) => {
   const startTime = Date.now();
-  try {
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = imageBuffer.toString('base64');
+  let compressedPath = null;
 
-    console.log('🔍 Sending to OCR.space...');
+  try {
+    compressedPath = await compressImage(imagePath);
+    const imageBuffer = fs.readFileSync(compressedPath);
+    const fileSizeKB = imageBuffer.length / 1024;
+    console.log(`📦 Compressed: ${fileSizeKB.toFixed(0)} KB`);
+
+    const base64Image = imageBuffer.toString('base64');
 
     const response = await fetch('https://api.ocr.space/parse/image', {
       method: 'POST',
@@ -35,12 +49,15 @@ const extractTextFromImage = async (imagePath) => {
     const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
 
     console.log(`✅ OCR Complete — ${wordCount} words detected`);
-
     return { text, confidence: 90, wordCount, processingTime };
 
   } catch (error) {
     console.error('OCR Error:', error);
     throw new Error(`OCR failed: ${error.message}`);
+  } finally {
+    if (compressedPath && fs.existsSync(compressedPath)) {
+      fs.unlinkSync(compressedPath);
+    }
   }
 };
 

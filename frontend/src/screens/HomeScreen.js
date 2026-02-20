@@ -58,9 +58,14 @@ export default function HomeScreen({ navigation }) {
       {/* CTA */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate('Scan')}>
-          <Ionicons name="camera" size={22} color="white" />
-          <Text style={styles.primaryBtnText}>Convert Notes to PDF</Text>
-        </TouchableOpacity>
+  <Ionicons name="camera" size={22} color="white" />
+  <Text style={styles.primaryBtnText}>Take Photo</Text>
+</TouchableOpacity>
+
+<TouchableOpacity style={styles.galleryBtn} onPress={() => navigation.navigate('Scan', { openGallery: true })}>
+  <Ionicons name="images-outline" size={22} color="#1a73e8" />
+  <Text style={styles.outlineBtnText}>Choose from Gallery</Text>
+</TouchableOpacity>
 
         <TouchableOpacity style={styles.outlineBtn} onPress={() => navigation.navigate('History')}>
           <Ionicons name="document-text-outline" size={20} color="#1a73e8" />
@@ -152,5 +157,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
     gap: 8, borderWidth: 2, borderColor: '#1a73e8', borderRadius: 14, padding: 14
   },
-  outlineBtnText: { color: '#1a73e8', fontSize: 15, fontWeight: 'bold' }
+  outlineBtnText: { color: '#1a73e8', fontSize: 15, fontWeight: 'bold' },
+  galleryBtn: {
+  flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+  gap: 8, borderWidth: 2, borderColor: '#1a73e8', borderRadius: 14, padding: 14
+}
 });

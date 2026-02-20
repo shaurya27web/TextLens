@@ -1,4 +1,4 @@
-const BASE_URL = 'http://192.168.31.227:5000/api';
+const BASE_URL = 'http://192.168.31.227:5001/api';
 
 const request = async (method, endpoint, body = null) => {
   try {
@@ -20,7 +20,10 @@ const request = async (method, endpoint, body = null) => {
 export const ocrAPI = {
   processBase64Image: (imageBase64, title, language = 'eng') =>
     request('POST', '/ocr/process-base64', { imageBase64, title, language }),
-};
+  processMultipleImages: (images, userId = null) =>
+  request('POST', '/ocr/process-multiple', { images, userId }),
+}
+;
 
 export const documentsAPI = {
   getAll: (page = 1, limit = 20) =>

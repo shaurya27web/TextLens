@@ -27,7 +27,7 @@ const PROCESSING_STEPS = [
   { id: 4, label: 'Generating PDF', icon: 'document' },
 ];
 
-export default function ScanScreen({ navigation }) {
+export default function ScanScreen({ navigation, route }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [step, setStep] = useState(STEPS.CAMERA);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -38,6 +38,12 @@ export default function ScanScreen({ navigation }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (route?.params?.openGallery) {
+      pickFromGallery();
+    }
+  }, []);
 
   useEffect(() => {
     if (step === STEPS.CAMERA) {
@@ -77,11 +83,22 @@ export default function ScanScreen({ navigation }) {
     }
     const pickerResult = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9, base64: true, allowsEditing: true
+      quality: 0.9,
+      base64: true,
+      allowsEditing: false,
+      allowsMultipleSelection: true,
+      selectionLimit: 10
     });
-    if (!pickerResult.canceled && pickerResult.assets[0]) {
-      setCapturedImage(pickerResult.assets[0]);
-      setStep(STEPS.PREVIEW);
+
+    if (!pickerResult.canceled && pickerResult.assets?.length > 0) {
+      if (pickerResult.assets.length === 1) {
+        setCapturedImage(pickerResult.assets[0]);
+        setStep(STEPS.PREVIEW);
+      } else {
+        setStep(STEPS.PROCESSING);
+        setCurrentProcessStep(0);
+        await processMultipleImages(pickerResult.assets);
+      }
     }
   };
 
@@ -90,7 +107,6 @@ export default function ScanScreen({ navigation }) {
     setStep(STEPS.PROCESSING);
     setCurrentProcessStep(0);
 
-    // Animate through steps
     const stepDuration = 3000;
     PROCESSING_STEPS.forEach((_, i) => {
       setTimeout(() => {
@@ -121,6 +137,41 @@ export default function ScanScreen({ navigation }) {
       setStep(STEPS.PREVIEW);
       progressAnim.setValue(0);
       Alert.alert('Failed', error.message || 'Could not process image. Try a clearer photo.');
+    }
+  };
+
+  const processMultipleImages = async (images) => {
+    setStep(STEPS.PROCESSING);
+    setCurrentProcessStep(0);
+
+    // Animate steps
+    PROCESSING_STEPS.forEach((_, i) => {
+      setTimeout(() => setCurrentProcessStep(i), i * 4000);
+    });
+
+    try {
+      // Convert all images to base64
+      const base64Images = [];
+      for (let i = 0; i < images.length; i++) {
+        let base64 = images[i].base64;
+        if (!base64) {
+          base64 = await FileSystem.readAsStringAsync(images[i].uri, {
+            encoding: FileSystem.EncodingType.Base64
+          });
+        }
+        base64Images.push(`data:image/jpeg;base64,${base64}`);
+      }
+
+      // Send ALL images in one request → get ONE combined PDF back
+      const response = await ocrAPI.processMultipleImages(base64Images);
+
+      progressAnim.setValue(100);
+      setResult(response.data);
+      setTimeout(() => setStep(STEPS.RESULT), 500);
+    } catch (error) {
+      setStep(STEPS.CAMERA);
+      progressAnim.setValue(0);
+      Alert.alert('Failed', error.message || 'Could not process images.');
     }
   };
 
@@ -163,13 +214,10 @@ export default function ScanScreen({ navigation }) {
     );
   }
 
-  // ─── CAMERA ──────────────────────────────────────────────────────
   if (step === STEPS.CAMERA) {
     return (
       <View style={styles.cameraContainer}>
         <CameraView ref={cameraRef} style={styles.camera} facing="back" flash={flash}>
-
-          {/* Top bar */}
           <SafeAreaView style={styles.topBar}>
             <TouchableOpacity onPress={() => navigation.navigate('History')} style={styles.topBarBtn}>
               <Ionicons name="time" size={22} color="white" />
@@ -183,7 +231,6 @@ export default function ScanScreen({ navigation }) {
             </TouchableOpacity>
           </SafeAreaView>
 
-          {/* Animated frame */}
           <View style={styles.frameArea}>
             <Animated.View style={[styles.docFrame, { transform: [{ scale: pulseAnim }] }]}>
               <View style={[styles.corner, styles.cornerTL]} />
@@ -197,7 +244,6 @@ export default function ScanScreen({ navigation }) {
             <Text style={styles.frameHint}>Place your notes inside the frame</Text>
           </View>
 
-          {/* Bottom controls */}
           <View style={styles.bottomBar}>
             <TouchableOpacity style={styles.sideBtn} onPress={pickFromGallery}>
               <View style={styles.sideBtnInner}>
@@ -205,13 +251,11 @@ export default function ScanScreen({ navigation }) {
               </View>
               <Text style={styles.sideBtnLabel}>Gallery</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.shutterBtn} onPress={capturePhoto}>
               <View style={styles.shutterRing}>
                 <View style={styles.shutterInner} />
               </View>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.sideBtn} onPress={() => navigation.navigate('History')}>
               <View style={styles.sideBtnInner}>
                 <Ionicons name="document-text-outline" size={26} color="white" />
@@ -219,13 +263,11 @@ export default function ScanScreen({ navigation }) {
               <Text style={styles.sideBtnLabel}>My PDFs</Text>
             </TouchableOpacity>
           </View>
-
         </CameraView>
       </View>
     );
   }
 
-  // ─── PREVIEW ─────────────────────────────────────────────────────
   if (step === STEPS.PREVIEW) {
     return (
       <SafeAreaView style={styles.previewContainer}>
@@ -236,15 +278,12 @@ export default function ScanScreen({ navigation }) {
           <Text style={styles.navTitle}>Review Photo</Text>
           <View style={{ width: 40 }} />
         </View>
-
         <Image source={{ uri: capturedImage?.uri }} style={styles.previewImage} resizeMode="contain" />
-
         <View style={styles.previewBottom}>
           <View style={styles.tipBox}>
             <Ionicons name="bulb-outline" size={18} color="#f59e0b" />
             <Text style={styles.tipText}>Make sure all text is visible and well-lit for best results</Text>
           </View>
-
           <View style={styles.previewBtns}>
             <TouchableOpacity style={styles.outlineBtn} onPress={resetScan}>
               <Ionicons name="camera-outline" size={20} color="#1a73e8" />
@@ -260,30 +299,21 @@ export default function ScanScreen({ navigation }) {
     );
   }
 
-  // ─── PROCESSING ──────────────────────────────────────────────────
   if (step === STEPS.PROCESSING) {
     const progressWidth = progressAnim.interpolate({
       inputRange: [0, 100], outputRange: ['0%', '100%']
     });
-
     return (
       <View style={styles.processingBg}>
         <View style={styles.processingCard}>
-
-          {/* Animated logo */}
           <View style={styles.processingLogo}>
             <Ionicons name="document-text" size={36} color="#1a73e8" />
           </View>
-
           <Text style={styles.processingTitle}>Converting your notes</Text>
           <Text style={styles.processingSubtitle}>This will take just a moment</Text>
-
-          {/* Progress bar */}
           <View style={styles.progressTrack}>
             <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
           </View>
-
-          {/* Step indicators */}
           <View style={styles.stepsContainer}>
             {PROCESSING_STEPS.map((s, i) => (
               <View key={s.id} style={styles.stepRow}>
@@ -314,12 +344,10 @@ export default function ScanScreen({ navigation }) {
     );
   }
 
-  // ─── RESULT ──────────────────────────────────────────────────────
   if (step === STEPS.RESULT && result) {
     return (
       <SafeAreaView style={styles.resultContainer}>
         <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
-
           <View style={styles.navBar}>
             <TouchableOpacity onPress={resetScan} style={styles.navBtn}>
               <Ionicons name="close" size={24} color="#333" />
@@ -329,21 +357,20 @@ export default function ScanScreen({ navigation }) {
               <Ionicons name="time" size={24} color="#1a73e8" />
             </TouchableOpacity>
           </View>
-
           <ScrollView style={styles.resultScroll} showsVerticalScrollIndicator={false}>
-
-            {/* Success banner */}
             <View style={styles.successBanner}>
               <View style={styles.successIconBox}>
                 <Ionicons name="checkmark-circle" size={32} color="#22c55e" />
               </View>
               <View>
                 <Text style={styles.successTitle}>Your PDF is ready!</Text>
-                <Text style={styles.successSub}>Handwriting successfully digitized</Text>
+                <Text style={styles.successSub}>
+                  {result.extractedText?.includes('--- Page')
+                    ? 'Multiple pages digitized'
+                    : 'Handwriting successfully digitized'}
+                </Text>
               </View>
             </View>
-
-            {/* Stats */}
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
                 <Text style={styles.statNum}>{result.wordCount}</Text>
@@ -360,8 +387,6 @@ export default function ScanScreen({ navigation }) {
                 <Text style={styles.statLabel}>Time</Text>
               </View>
             </View>
-
-            {/* Extracted text preview */}
             <View style={styles.textCard}>
               <View style={styles.textCardHeader}>
                 <Ionicons name="text" size={16} color="#1a73e8" />
@@ -371,18 +396,14 @@ export default function ScanScreen({ navigation }) {
                 <Text style={styles.extractedText}>{result.extractedText}</Text>
               </ScrollView>
             </View>
-
-            {/* Action buttons */}
             <TouchableOpacity style={styles.downloadBtn} onPress={downloadPDF}>
               <Ionicons name="download-outline" size={22} color="white" />
               <Text style={styles.downloadBtnText}>Save PDF to Device</Text>
             </TouchableOpacity>
-
             <TouchableOpacity style={styles.outlineBtn2} onPress={resetScan}>
               <Ionicons name="camera-outline" size={20} color="#1a73e8" />
               <Text style={styles.outlineBtn2Text}>Convert Another Page</Text>
             </TouchableOpacity>
-
           </ScrollView>
         </Animated.View>
       </SafeAreaView>
@@ -397,8 +418,6 @@ const styles = StyleSheet.create({
   permBox: { alignItems: 'center', padding: 40 },
   permTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginTop: 16 },
   permText: { fontSize: 14, color: '#888', marginTop: 6, marginBottom: 24 },
-
-  // Camera
   cameraContainer: { flex: 1 },
   camera: { flex: 1 },
   topBar: {
@@ -437,12 +456,9 @@ const styles = StyleSheet.create({
   shutterBtn: { alignItems: 'center', justifyContent: 'center' },
   shutterRing: {
     width: 76, height: 76, borderRadius: 38,
-    borderWidth: 3, borderColor: 'white',
-    justifyContent: 'center', alignItems: 'center'
+    borderWidth: 3, borderColor: 'white', justifyContent: 'center', alignItems: 'center'
   },
   shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white' },
-
-  // Preview
   previewContainer: { flex: 1, backgroundColor: '#fff' },
   navBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -460,8 +476,6 @@ const styles = StyleSheet.create({
   },
   tipText: { flex: 1, fontSize: 13, color: '#92400e' },
   previewBtns: { flexDirection: 'row', gap: 10 },
-
-  // Buttons
   primaryBtn: {
     flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
     gap: 8, backgroundColor: '#1a73e8', borderRadius: 12, padding: 15
@@ -472,8 +486,6 @@ const styles = StyleSheet.create({
     gap: 8, borderWidth: 2, borderColor: '#1a73e8', borderRadius: 12, padding: 13
   },
   outlineBtnText: { color: '#1a73e8', fontWeight: 'bold', fontSize: 15 },
-
-  // Processing
   processingBg: {
     flex: 1, backgroundColor: 'rgba(15,23,42,0.95)',
     justifyContent: 'center', alignItems: 'center'
@@ -505,8 +517,6 @@ const styles = StyleSheet.create({
   stepText: { fontSize: 14, color: '#aaa' },
   stepTextActive: { color: '#1a1a1a', fontWeight: '600' },
   stepTextDone: { color: '#22c55e' },
-
-  // Result
   resultContainer: { flex: 1, backgroundColor: '#f8f9fa' },
   resultScroll: { flex: 1 },
   successBanner: {
