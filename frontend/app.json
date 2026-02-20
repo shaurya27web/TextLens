@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "TextLens",
+    "slug": "textlens-app",
+    "version": "1.0.0",
+    "sdkVersion": "52.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.textlens.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "TextLens needs camera access to scan text.",
+        "NSPhotoLibraryUsageDescription": "TextLens needs photo access to select images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a73e8"
+      },
+      "package": "com.textlens.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
+      ]
+    },
+    "plugins": [
+      ["expo-camera", { "cameraPermission": "Allow TextLens to access your camera." }],
+      ["expo-image-picker", { "photosPermission": "Allow TextLens to access your photos." }]
+    ]
+  }
+}
